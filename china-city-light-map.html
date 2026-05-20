@@ -1,0 +1,1483 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>中国城市点亮地图</title>
+    <script src="./vendor/echarts.min.js"></script>
+    <style>
+      :root {
+        --bg-top: #f9f7f3;
+        --bg-bottom: #f3f0eb;
+        --panel: rgba(255, 255, 255, 0.9);
+        --panel-hover: rgba(255, 255, 255, 0.96);
+        --line: rgba(0, 0, 0, 0.06);
+        --line-hover: rgba(0, 0, 0, 0.1);
+        --text: #1a1a1a;
+        --text-secondary: #444444;
+        --text-muted: #999999;
+        --accent: #e07b5f;
+        --accent-hover: #d06a4f;
+        --accent-soft: rgba(224, 123, 95, 0.1);
+        --accent-light: #fff5f2;
+        --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
+        --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+        --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.08);
+        --shadow-xl: 0 2px 8px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.04);
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-lg: 16px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+        color: var(--text);
+        font-family:
+          "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .bg-gradient {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        opacity: 1;
+        background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+      }
+
+      .bg-noise {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        opacity: 0.3;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      }
+
+      .bg-shape {
+        position: fixed;
+        z-index: 0;
+        pointer-events: none;
+        border-radius: 50%;
+        filter: blur(100px);
+        opacity: 0.5;
+      }
+
+      .bg-shape-1 {
+        width: 700px;
+        height: 700px;
+        top: -250px;
+        right: -150px;
+        background: radial-gradient(circle, rgba(224, 123, 95, 0.06) 0%, transparent 70%);
+      }
+
+      .bg-shape-2 {
+        width: 600px;
+        height: 600px;
+        bottom: -200px;
+        left: -150px;
+        background: radial-gradient(circle, rgba(0, 0, 0, 0.03) 0%, transparent 70%);
+      }
+
+      button {
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        background: var(--panel);
+        color: var(--text);
+        cursor: pointer;
+        font: inherit;
+        transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: var(--shadow-sm);
+      }
+
+      button:hover:not(:disabled) {
+        border-color: var(--line-hover);
+        background: var(--panel-hover);
+        box-shadow: var(--shadow-md);
+        transform: translateY(-1px);
+      }
+
+      button:active:not(:disabled) {
+        transform: translateY(0);
+        box-shadow: var(--shadow-sm);
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.4;
+      }
+
+      .app {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        min-width: 320px;
+        isolation: isolate;
+      }
+
+      #map {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.06));
+      }
+
+      .topbar {
+        position: absolute;
+        top: 24px;
+        left: 24px;
+        right: 24px;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        min-height: 60px;
+        padding: 14px 18px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: var(--panel);
+        backdrop-filter: blur(24px);
+        box-shadow: var(--shadow-xl);
+      }
+
+      .title {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        gap: 2px;
+      }
+
+      .title h1 {
+        margin: 0;
+        color: var(--text);
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+      }
+
+      .crumb {
+        min-width: 0;
+        overflow: hidden;
+        color: var(--text-muted);
+        font-size: 12px;
+        font-weight: 400;
+        text-overflow: ellipsis;
+      }
+
+      .actions {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .icon-button {
+        display: inline-flex;
+        width: 38px;
+        height: 38px;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--line);
+        background: var(--panel);
+        box-shadow: var(--shadow-sm);
+        transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .icon-button svg {
+        width: 18px;
+        height: 18px;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .counter {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 88px;
+        padding: 8px 14px;
+        border: 1px solid rgba(224, 123, 95, 0.25);
+        border-radius: 20px;
+        color: var(--accent);
+        background: var(--accent-light);
+        font-size: 13px;
+        font-weight: 600;
+        text-align: center;
+        white-space: nowrap;
+        letter-spacing: 0.01em;
+        transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .counter svg {
+        width: 14px;
+        height: 14px;
+        stroke: currentColor;
+        stroke-width: 2;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .counter:hover {
+        background: rgba(224, 123, 95, 0.15);
+        border-color: rgba(224, 123, 95, 0.35);
+      }
+
+      .side {
+        position: absolute;
+        right: 24px;
+        bottom: 80px;
+        z-index: 2;
+        display: flex;
+        width: min(380px, calc(100vw - 48px));
+        max-height: min(480px, calc(100vh - 140px));
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: var(--panel);
+        backdrop-filter: blur(24px);
+        box-shadow: var(--shadow-xl);
+      }
+
+      .side-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+        flex-shrink: 0;
+      }
+
+      .side-head strong {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .side-head strong svg {
+        width: 16px;
+        height: 16px;
+        stroke: var(--accent);
+        stroke-width: 2;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .clear {
+        min-width: 48px;
+        height: 26px;
+        padding: 0 10px;
+        font-size: 12px;
+        color: var(--text-muted);
+        border-color: var(--line);
+        background: transparent;
+        border-radius: 13px;
+      }
+
+      .clear:hover:not(:disabled) {
+        color: var(--accent);
+        border-color: rgba(224, 123, 95, 0.3);
+        background: var(--accent-light);
+      }
+
+      .filter-bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--line);
+        flex-shrink: 0;
+      }
+
+      .search-box {
+        flex: 1;
+        position: relative;
+        min-width: 0;
+      }
+
+      .search-icon {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 14px;
+        height: 14px;
+        stroke: var(--text-muted);
+        stroke-width: 2;
+        fill: none;
+        pointer-events: none;
+      }
+
+      .search-input {
+        width: 100%;
+        height: 32px;
+        padding: 0 10px 0 32px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        background: #fafafa;
+        color: var(--text);
+        font-size: 12px;
+        font-family: inherit;
+        outline: none;
+        transition: all 180ms ease;
+      }
+
+      .search-input::placeholder {
+        color: var(--text-muted);
+      }
+
+      .search-input:focus {
+        border-color: var(--accent);
+        background: var(--accent-light);
+      }
+
+      .filter-actions {
+        display: flex;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+
+      .filter-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 32px;
+        padding: 0 10px;
+        font-size: 12px;
+        color: var(--text-muted);
+        background: transparent;
+        border: none;
+        border-radius: var(--radius-sm);
+        box-shadow: none;
+        transition: all 180ms ease;
+        white-space: nowrap;
+      }
+
+      .filter-btn svg {
+        width: 14px;
+        height: 14px;
+        stroke: currentColor;
+        stroke-width: 2;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .filter-btn:hover {
+        color: var(--accent);
+        background: var(--accent-light);
+      }
+
+      .filter-btn.active {
+        color: var(--accent);
+        position: relative;
+      }
+
+      .filter-btn.active::after {
+        content: "";
+        position: absolute;
+        bottom: 2px;
+        left: 8px;
+        right: 8px;
+        height: 2px;
+        background: var(--accent);
+        border-radius: 1px;
+      }
+
+      .selected-list {
+        margin: 0;
+        padding: 10px;
+        overflow-y: auto;
+        list-style: none;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        align-content: start;
+      }
+
+      .selected-list li.city-card {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+        padding: 10px 12px;
+        background: #fafafa;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .selected-list li.city-card:hover {
+        background: var(--accent-light);
+        border-color: rgba(224, 123, 95, 0.25);
+        transform: translateY(-1px);
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
+      }
+
+      .selected-list li.city-card:active {
+        transform: translateY(0) scale(0.98);
+      }
+
+      .city-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        padding: 12px 8px;
+      }
+
+      .city-card .city-icon {
+        width: 28px;
+        height: 28px;
+        stroke: var(--accent);
+        stroke-width: 1.5;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        opacity: 0.7;
+        transition: all 200ms ease;
+      }
+
+      .selected-list li.city-card:hover .city-icon {
+        opacity: 1;
+        transform: scale(1.1);
+      }
+
+      .city-card .city-name {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text);
+        line-height: 1.3;
+        text-align: center;
+      }
+
+      .city-card .province-name {
+        font-size: 10px;
+        color: var(--text-muted);
+        line-height: 1.3;
+        text-align: center;
+      }
+
+      .city-card .delete-btn {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 20px;
+        height: 20px;
+        padding: 0;
+        font-size: 14px;
+        color: var(--text-muted);
+        background: transparent;
+        border: none;
+        border-radius: 50%;
+        opacity: 0;
+        transform: scale(0.8);
+        transition: all 150ms ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .selected-list li.city-card:hover .delete-btn {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      .city-card .delete-btn:hover {
+        color: var(--accent);
+        background: rgba(224, 123, 95, 0.15);
+      }
+
+      .empty {
+        grid-column: 1 / -1;
+        padding: 32px 16px;
+        color: var(--text-muted);
+        font-size: 13px;
+        line-height: 1.6;
+        text-align: center;
+      }
+
+      .status {
+        position: absolute;
+        left: 24px;
+        bottom: 24px;
+        z-index: 3;
+        max-width: min(400px, calc(100vw - 48px));
+        padding: 11px 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--panel);
+        color: var(--text-secondary);
+        font-size: 13px;
+        backdrop-filter: blur(24px);
+        box-shadow: var(--shadow-md);
+      }
+
+      .status.error {
+        border-color: rgba(224, 123, 95, 0.25);
+        color: var(--accent);
+        background: var(--accent-light);
+      }
+
+      .right-sidebar-wrapper ~ .status {
+        position: fixed;
+        bottom: 24px;
+        left: 24px;
+        top: auto;
+        right: auto;
+      }
+
+      @media (max-width: 760px) {
+        .right-sidebar-wrapper ~ .status {
+          bottom: 14px;
+          left: 14px;
+          right: 14px;
+          top: auto;
+          max-width: none;
+        }
+      }
+
+      .travel-panel {
+        position: absolute;
+        right: 24px;
+        bottom: 576px;
+        z-index: 2;
+        width: min(520px, calc(100vw - 48px));
+        max-height: 320px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: var(--panel);
+        backdrop-filter: blur(24px);
+        box-shadow: var(--shadow-xl);
+      }
+
+      .travel-content {
+        padding: 16px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .travel-input-group {
+        display: flex;
+        gap: 12px;
+      }
+
+      .travel-input {
+        flex: 1;
+        min-width: 0;
+        height: 44px;
+        padding: 0 16px;
+        border: 1px solid #e0e0e0;
+        border-radius: var(--radius-md);
+        background: #fafafa;
+        color: var(--text);
+        font-size: 14px;
+        font-family: inherit;
+        outline: none;
+        transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .travel-input::placeholder {
+        color: var(--text-muted);
+      }
+
+      .travel-input:hover {
+        border-color: #ccc;
+      }
+
+      .travel-input:focus {
+        border-color: var(--accent);
+        background: var(--accent-light);
+        box-shadow: 0 0 0 3px rgba(224, 123, 95, 0.1);
+      }
+
+      .travel-btn {
+        flex: 0 0 auto;
+        height: 44px;
+        padding: 0 20px;
+        border: none;
+        border-radius: var(--radius-md);
+        background: var(--accent);
+        color: #ffffff;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        box-shadow: 0 2px 8px rgba(224, 123, 95, 0.3);
+      }
+
+      .travel-btn:hover {
+        background: var(--accent-hover);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(224, 123, 95, 0.4);
+      }
+
+      .travel-btn svg {
+        width: 16px;
+        height: 16px;
+        stroke: currentColor;
+        stroke-width: 2;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .travel-prompt-box {
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--accent-light);
+        font-size: 13px;
+        line-height: 1.7;
+        color: var(--text-secondary);
+        max-height: 100px;
+        overflow-y: auto;
+      }
+
+      .travel-hint {
+        margin: 0;
+        color: var(--text-muted);
+      }
+
+      .travel-prompt-box p {
+        margin: 0;
+      }
+
+      .copy-btn {
+        border: none;
+        background: var(--accent);
+        color: #ffffff;
+        justify-content: center;
+        font-weight: 600;
+        border-radius: var(--radius-md);
+        box-shadow: 0 2px 8px rgba(224, 123, 95, 0.3);
+      }
+
+      .copy-btn:hover {
+        background: var(--accent-hover);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(224, 123, 95, 0.4);
+      }
+
+      .copy-btn svg {
+        width: 14px;
+        height: 14px;
+        stroke: currentColor;
+        stroke-width: 2;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      @media (max-width: 760px) {
+        .topbar {
+          top: 14px;
+          left: 14px;
+          right: 14px;
+          align-items: flex-start;
+          flex-direction: column;
+          padding: 14px 16px;
+          gap: 12px;
+        }
+
+        .title {
+          width: 100%;
+          flex-direction: column;
+          gap: 3px;
+        }
+
+        .actions {
+          width: 100%;
+          justify-content: space-between;
+          margin-top: 6px;
+        }
+
+        .side {
+          right: 14px;
+          bottom: 90px;
+          width: calc(100vw - 28px);
+          max-height: 380px;
+        }
+
+        .filter-bar {
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .search-box {
+          width: 100%;
+        }
+
+        .filter-actions {
+          width: 100%;
+          justify-content: flex-start;
+        }
+
+        .selected-list {
+          grid-template-columns: repeat(2, 1fr);
+          gap: 6px;
+          padding: 8px;
+        }
+      }
+
+      .right-sidebar-wrapper {
+        position: absolute;
+        right: 24px;
+        bottom: 24px;
+        z-index: 2;
+        width: min(380px, calc(100vw - 48px));
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .right-sidebar-wrapper .travel-panel,
+      .right-sidebar-wrapper .side {
+        position: static;
+        width: 100%;
+        max-height: none;
+        bottom: auto;
+        left: auto;
+        right: auto;
+        transform: none;
+      }
+
+      .right-sidebar-wrapper .travel-panel {
+        max-height: 320px;
+      }
+
+      .right-sidebar-wrapper .side {
+        max-height: 480px;
+      }
+
+      @media (max-width: 760px) {
+        .right-sidebar-wrapper {
+          right: 14px;
+          left: 14px;
+          bottom: 14px;
+          width: auto;
+          gap: 8px;
+        }
+
+        .right-sidebar-wrapper .side {
+          max-height: 300px;
+        }
+
+        .right-sidebar-wrapper .travel-panel {
+          max-height: 200px;
+        }
+      }
+
+      @keyframes fadeInScale {
+        from {
+          opacity: 0;
+          transform: scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      @keyframes slideInUp {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+    </style>
+  </head>
+  <body>
+    <div class="bg-gradient"></div>
+    <div class="bg-noise"></div>
+    <div class="bg-shape bg-shape-1"></div>
+    <div class="bg-shape bg-shape-2"></div>
+    <main class="app">
+      <div id="map" aria-label="中国城市点亮地图"></div>
+
+      <header class="topbar">
+        <div class="title">
+          <h1>中国城市点亮地图</h1>
+          <span class="crumb" id="breadcrumb">全国 / 点击省份查看市区</span>
+        </div>
+        <div class="actions">
+          <button class="icon-button" id="backBtn" type="button" title="返回全国" aria-label="返回全国" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M19 12H5" />
+              <path d="m12 19-7-7 7-7" />
+            </svg>
+          </button>
+          <button class="icon-button" id="resetZoomBtn" type="button" title="重置视图" aria-label="重置视图">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 12a9 9 0 0 1 15.2-6.5" />
+              <path d="M18 2v4h-4" />
+              <path d="M21 12a9 9 0 0 1-15.2 6.5" />
+              <path d="M6 22v-4h4" />
+            </svg>
+          </button>
+          <span class="counter" id="counter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <span id="counterText">已点亮 0</span>
+          </span>
+        </div>
+      </header>
+
+      <div class="right-sidebar-wrapper">
+
+      <aside class="travel-panel" aria-label="旅行推荐">
+        <div class="side-head">
+          <strong>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+            </svg>
+            AI 旅行推荐
+          </strong>
+        </div>
+        <div class="travel-content">
+          <div class="travel-input-group">
+            <input type="text" id="currentCityInput" class="travel-input" placeholder="输入你当前所在城市，生成专属旅行推荐" />
+            <button type="button" id="generatePromptBtn" class="travel-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+              生成推荐
+            </button>
+          </div>
+          <div class="travel-prompt-box" id="travelPromptBox">
+            <p class="travel-hint">告诉AI你想去哪里，它会给你最合适的旅行建议 ✨</p>
+          </div>
+          <button type="button" id="copyPromptBtn" class="travel-btn copy-btn" style="display:none">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            复制提示词
+          </button>
+        </div>
+      </aside>
+
+      <aside class="side" aria-label="已点亮省份">
+        <div class="side-head">
+          <strong>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+            已点亮省份
+          </strong>
+          <button class="clear" id="clearBtn" type="button">清空</button>
+        </div>
+        <div class="filter-bar">
+          <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="citySearch" class="search-input" placeholder="搜索省份..." />
+          </div>
+          <div class="filter-actions">
+            <button type="button" class="filter-btn" id="sortByTime">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              时间排序
+            </button>
+          </div>
+        </div>
+        <div class="selected-list" id="selectedList"></div>
+      </aside>
+
+      </div>
+
+      <div class="status" id="status">点击省份进入市区地图，点击市区点亮或取消点亮。</div>
+    </main>
+
+    <script>
+      const LOCAL_GEO_BASE = new URL("./maps/", window.location.href);
+      const REMOTE_GEO_BASE = "https://geo.datav.aliyun.com/areas_v3/bound/";
+      const STORAGE_KEY = "china-city-light-map:selected";
+      const DIRECT_CITY_ADCODES = new Set([110000, 120000, 310000, 500000]);
+
+      const els = {
+        backBtn: document.getElementById("backBtn"),
+        resetZoomBtn: document.getElementById("resetZoomBtn"),
+        clearBtn: document.getElementById("clearBtn"),
+        counter: document.getElementById("counter"),
+        breadcrumb: document.getElementById("breadcrumb"),
+        selectedList: document.getElementById("selectedList"),
+        status: document.getElementById("status"),
+      };
+
+      let chart = null;
+      const storedLitTimes = new Map();
+
+      const state = {
+        mode: "china",
+        currentName: "全国",
+        currentAdcode: 100000,
+        selected: new Map(loadSelected()),
+        cache: new Map(),
+        geoJson: null,
+        sortByTime: false,
+        searchQuery: "",
+        litTimes: storedLitTimes,
+      };
+
+      function loadSelected() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+          if (Array.isArray(saved)) {
+            saved.forEach(([key, city]) => {
+              if (city.litTime) {
+                storedLitTimes.set(key, city.litTime);
+              }
+            });
+            return saved;
+          }
+          return [];
+        } catch {
+          return [];
+        }
+      }
+
+      function saveSelected() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify([...state.selected.entries()]));
+      }
+
+      function setLitTime(adcode, time) {
+        state.litTimes.set(String(adcode), time);
+      }
+
+      function setStatus(message, isError = false) {
+        els.status.textContent = message;
+        els.status.classList.toggle("error", isError);
+      }
+
+      async function fetchGeoJson(adcode) {
+        if (state.cache.has(adcode)) {
+          return state.cache.get(adcode);
+        }
+
+        const files = geoJsonFileCandidates(adcode);
+        const bases = [LOCAL_GEO_BASE, REMOTE_GEO_BASE];
+
+        for (const base of bases) {
+          for (const file of files) {
+            try {
+              const response = await fetch(new URL(file, base));
+              if (response.ok) {
+                const geoJson = await response.json();
+                state.cache.set(adcode, geoJson);
+                return geoJson;
+              }
+            } catch {
+              // Continue to the next candidate. This keeps local deploys working
+              // even if a browser blocks file:// fetches or a remote CDN is down.
+            }
+          }
+        }
+
+        throw new Error(`地图数据加载失败：${files.join(" / ")}`);
+      }
+
+      function geoJsonFileCandidates(adcode) {
+        const code = String(adcode);
+        if (code === "100000") return ["100000_full.json"];
+        if (code === "710000") return ["710000.json", "710000_full.json"];
+        return [`${code}_full.json`, `${code}.json`];
+      }
+
+      function selectedInProvince(adcode) {
+        for (const city of state.selected.values()) {
+          if (city.provinceAdcode === adcode || city.adcode === adcode) {
+            return true;
+          }
+        }
+        return false;
+      }
+
+      function regionData(feature) {
+        const props = feature.properties || {};
+        const adcode = Number(props.adcode);
+        const isChina = state.mode === "china";
+        const isLit = isChina ? selectedInProvince(adcode) : state.selected.has(String(adcode));
+
+        return {
+          name: props.name,
+          value: isLit ? 1 : 0,
+          adcode,
+          level: props.level,
+          childrenNum: Number(props.childrenNum || 0),
+          provinceName: isChina ? props.name : state.currentName,
+          provinceAdcode: isChina ? adcode : state.currentAdcode,
+          itemStyle: isLit
+            ? {
+                areaColor: "#e67e5f",
+                borderColor: "#c45d3a",
+                borderWidth: 1,
+                shadowBlur: 25,
+                shadowColor: "rgba(230, 126, 95, 0.5)",
+              }
+            : undefined,
+          label: isLit
+            ? {
+                color: "#ffffff",
+                fontWeight: 800,
+              }
+            : undefined,
+        };
+      }
+
+      function optionFor(mapName, geoJson) {
+        const isChina = state.mode === "china";
+        const data = geoJson.features.map(regionData);
+
+        return {
+          backgroundColor: "transparent",
+          tooltip: {
+            trigger: "item",
+            borderWidth: 0,
+            padding: [10, 14],
+            backgroundColor: "rgba(255, 255, 255, 0.96)",
+            textStyle: { color: "#1a1a1a", fontSize: 13 },
+            boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
+            borderRadius: 10,
+            formatter(params) {
+              const item = params.data;
+              if (!item) return "";
+              if (isChina && item.childrenNum > 0 && !DIRECT_CITY_ADCODES.has(item.adcode)) {
+                return `${item.name}<br/><span style="color:#999;font-size:12px">点击查看市区</span>`;
+              }
+              const label = cityLabel(item);
+              const lit = state.selected.has(String(item.adcode));
+              return `${label}<br/><span style="color:#999;font-size:12px">点击${lit ? "取消点亮" : "点亮"}</span>`;
+            },
+          },
+          series: [
+            {
+              type: "map",
+              map: mapName,
+              name: state.currentName,
+              roam: true,
+              zoom: 1.15,
+              scaleLimit: { min: 0.75, max: 8 },
+              data,
+              itemStyle: {
+                areaColor: isChina ? "#e6edf3" : "#eaeff4",
+                borderColor: "#c5cfd6",
+                borderWidth: isChina ? 0.5 : 1,
+              },
+              emphasis: {
+                focus: "self",
+                label: {
+                  show: true,
+                  color: "#ffffff",
+                  fontSize: isChina ? 13 : 15,
+                  fontWeight: 700,
+                },
+                itemStyle: {
+                  areaColor: "#e67e5f",
+                  borderColor: "#c45d3a",
+                  borderWidth: 1.2,
+                  shadowBlur: 20,
+                  shadowColor: "rgba(230, 126, 95, 0.5)",
+                },
+              },
+              select: {
+                disabled: true,
+              },
+              label: {
+                show: true,
+                color: "#5a6a7a",
+                fontSize: isChina ? 11 : 13,
+                fontWeight: 500,
+                overflow: "break",
+              },
+            },
+          ],
+        };
+      }
+
+      function cityLabel(city) {
+        return city.provinceName === city.name ? city.name : `${city.provinceName} · ${city.name}`;
+      }
+
+      function getProvinceIcon(provinceName) {
+        const iconMap = {
+          "北京": "<rect x='3' y='3' width='18' height='18' rx='2'/><path d='M9 3v18'/><path d='M3 9h18'/>",
+          "天津": "<circle cx='12' cy='12' r='9'/><path d='M12 3v18'/><path d='M3 12h18'/>",
+          "河北": "<path d='M3 21h18'/><path d='M5 21V9l7-6 7 6v12'/>",
+          "山西": "<circle cx='12' cy='12' r='9'/><path d='M8 8l8 8'/><path d='M16 8l-8 8'/>",
+          "内蒙古": "<path d='M3 21h18'/><path d='M3 17h18'/><path d='M7 17v4'/><path d='M17 17v4'/>",
+          "辽宁": "<circle cx='12' cy='12' r='9'/><path d='M12 3v18'/><circle cx='12' cy='12' r='4'/>",
+          "吉林": "<circle cx='12' cy='12' r='9'/><path d='M12 3a9 9 0 0 1 0 18'/>",
+          "黑龙江": "<circle cx='12' cy='12' r='9'/><path d='M3 12h18'/><path d='M12 3v18'/>",
+          "上海": "<circle cx='12' cy='12' r='9'/><path d='M12 6v12'/><path d='M6 12h12'/>",
+          "江苏": "<circle cx='12' cy='12' r='9'/><circle cx='12' cy='12' r='3'/>",
+          "浙江": "<circle cx='12' cy='12' r='9'/><path d='M12 6v2'/><path d='M12 16v2'/>",
+          "安徽": "<circle cx='12' cy='12' r='9'/><path d='M8 8l8 8'/><path d='M16 8l-8 8'/>",
+          "福建": "<circle cx='12' cy='12' r='9'/><path d='M7 7l10 10'/><path d='M17 7L7 17'/>",
+          "江西": "<circle cx='12' cy='12' r='9'/><path d='M12 3l9 18'/>",
+          "山东": "<rect x='3' y='3' width='18' height='18' rx='2'/><path d='M3 9h18'/>",
+          "河南": "<circle cx='12' cy='12' r='9'/><path d='M12 7v10'/><path d='M8 12h8'/>",
+          "湖北": "<circle cx='12' cy='12' r='9'/><path d='M12 3v6l6 3'/>",
+          "湖南": "<circle cx='12' cy='12' r='9'/><path d='M9 9l6 6'/><path d='M15 9l-6 6'/>",
+          "广东": "<circle cx='12' cy='12' r='9'/><path d='M12 3v6'/><path d='M6 12h12'/>",
+          "广西": "<circle cx='12' cy='12' r='9'/><path d='M9 9l6 3-6 3'/>",
+          "海南": "<circle cx='12' cy='12' r='9'/><path d='M12 3a9 9 0 0 1 3 9'/>",
+          "重庆": "<rect x='3' y='3' width='18' height='18' rx='2'/><path d='M9 21V9'/><path d='M15 21V9'/>",
+          "四川": "<circle cx='12' cy='12' r='9'/><path d='M8 12h8'/><path d='M12 8v8'/>",
+          "贵州": "<circle cx='12' cy='12' r='9'/><path d='M9 15l6-6 6 6'/>",
+          "云南": "<circle cx='12' cy='12' r='9'/><path d='M9 9c3-3 6 0 6 6'/>",
+          "西藏": "<circle cx='12' cy='12' r='9'/><path d='M6 18l12-12 12 12'/>",
+          "陕西": "<rect x='3' y='3' width='18' height='18' rx='2'/><circle cx='12' cy='12' r='4'/>",
+          "甘肃": "<circle cx='12' cy='12' r='9'/><path d='M12 3v18'/>",
+          "青海": "<circle cx='12' cy='12' r='9'/><path d='M7 7l10 10'/>",
+          "宁夏": "<circle cx='12' cy='12' r='9'/><path d='M8 8l8 8'/><circle cx='12' cy='12' r='3'/>",
+          "新疆": "<rect x='3' y='3' width='18' height='18' rx='2'/><path d='M3 9h18'/><path d='M3 15h18'/>",
+          "台湾": "<ellipse cx='12' cy='12' rx='9' ry='6'/><path d='M12 6v12'/>",
+        };
+        const icon = iconMap[provinceName];
+        if (icon) {
+          return `<svg class="city-icon" viewBox="0 0 24 24">${icon}</svg>`;
+        }
+        return `<svg class="city-icon" viewBox="0 0 24 24"><circle cx='12' cy='12' r='9'/><path d='M12 3v18'/></svg>`;
+      }
+
+      function renderList() {
+        let cities = [...state.selected.values()];
+
+        if (state.searchQuery) {
+          const query = state.searchQuery.toLowerCase();
+          cities = cities.filter(
+            (c) =>
+              c.name.toLowerCase().includes(query) ||
+              c.provinceName.toLowerCase().includes(query),
+          );
+        }
+
+        const grouped = {};
+        cities.forEach((city) => {
+          if (!grouped[city.provinceName]) {
+            grouped[city.provinceName] = [];
+          }
+          grouped[city.provinceName].push(city);
+        });
+
+        const provinces = Object.keys(grouped).sort((a, b) =>
+          a.localeCompare(b, "zh-Hans-CN"),
+        );
+
+        if (state.sortByTime) {
+          provinces.sort((a, b) => {
+            const timeA = Math.max(...grouped[a].map((c) => state.litTimes.get(String(c.adcode)) || 0));
+            const timeB = Math.max(...grouped[b].map((c) => state.litTimes.get(String(c.adcode)) || 0));
+            return timeB - timeA;
+          });
+        }
+
+        const counterText = document.getElementById("counterText");
+        if (counterText) counterText.textContent = `已点亮 ${state.selected.size}`;
+        els.clearBtn.disabled = state.selected.size === 0;
+
+        if (provinces.length === 0) {
+          const emptyText =
+            state.selected.size === 0
+              ? "暂无点亮省份。点击地图中的省份即可点亮。"
+              : "没有匹配的省份";
+          els.selectedList.innerHTML = `<li class="empty">${emptyText}</li>`;
+          return;
+        }
+
+        els.selectedList.innerHTML = provinces
+          .map((province) => {
+            const citiesInProvince = grouped[province];
+            const cityNames = citiesInProvince.map((c) => c.name).join("、");
+            const firstAdcode = citiesInProvince[0].adcode;
+            return `
+              <li class="city-card" data-province="${province}" data-adcode="${firstAdcode}">
+                ${getProvinceIcon(province)}
+                <span class="city-name">${province}</span>
+                <span class="province-name">${cityNames}</span>
+                <button type="button" class="delete-btn" data-province="${province}" title="取消点亮 ${province}">×</button>
+              </li>
+            `;
+          })
+          .join("");
+      }
+
+      function setupFilterEvents() {
+        const searchInput = document.getElementById("citySearch");
+        const sortBtn = document.getElementById("sortByTime");
+
+        if (searchInput) {
+          searchInput.addEventListener("input", (e) => {
+            state.searchQuery = e.target.value;
+            renderList();
+          });
+        }
+
+        if (sortBtn) {
+          sortBtn.addEventListener("click", () => {
+            state.sortByTime = !state.sortByTime;
+            sortBtn.classList.toggle("active", state.sortByTime);
+            renderList();
+          });
+        }
+      }
+
+      function syncChrome() {
+        els.backBtn.disabled = state.mode === "china";
+        els.breadcrumb.textContent =
+          state.mode === "china" ? "全国 / 点击省份查看市区" : `全国 / ${state.currentName}`;
+        renderList();
+      }
+
+      function drawCurrent() {
+        if (!chart || !state.geoJson) return;
+        const mapName = String(state.currentAdcode);
+        echarts.registerMap(mapName, state.geoJson);
+        chart.setOption(optionFor(mapName, state.geoJson), true);
+        syncChrome();
+      }
+
+      async function enterChina() {
+        setStatus("正在加载全国地图...");
+        state.mode = "china";
+        state.currentName = "全国";
+        state.currentAdcode = 100000;
+        state.geoJson = await fetchGeoJson(100000);
+        drawCurrent();
+        setStatus("点击省份查看该省市区名称和边界，直辖市可直接点亮。");
+      }
+
+      async function enterProvince(region) {
+        setStatus(`正在加载${region.name}市区地图...`);
+        state.mode = "province";
+        state.currentName = region.name;
+        state.currentAdcode = Number(region.adcode);
+        state.geoJson = await fetchGeoJson(region.adcode);
+        drawCurrent();
+        setStatus(`${region.name}市区地图已加载。点击市区点亮或取消点亮。`);
+      }
+
+      async function enterProvinceByAdcode(adcode) {
+        const china = await fetchGeoJson(100000);
+        const feature = china.features.find(
+          (item) => Number(item.properties?.adcode) === Number(adcode),
+        );
+        if (!feature) {
+          await enterChina();
+          return;
+        }
+        await enterProvince(regionData(feature));
+      }
+
+      function toggleCity(region) {
+        const key = String(region.adcode);
+        if (state.selected.has(key)) {
+          state.selected.delete(key);
+          setStatus(`已取消点亮：${cityLabel(region)}`);
+        } else {
+          const now = Date.now();
+          state.selected.set(key, {
+            adcode: Number(region.adcode),
+            name: region.name,
+            provinceAdcode: Number(region.provinceAdcode),
+            provinceName: region.provinceName,
+            litTime: now,
+          });
+          setLitTime(region.adcode, now);
+          setStatus(`已点亮：${cityLabel(region)}`);
+        }
+        saveSelected();
+        drawCurrent();
+        renderList();
+      }
+
+      function bindChartEvents() {
+        chart.on("click", async (params) => {
+          if (!params.data) return;
+          const region = params.data;
+
+          try {
+            if (
+              state.mode === "china" &&
+              region.childrenNum > 0 &&
+              !DIRECT_CITY_ADCODES.has(region.adcode)
+            ) {
+              await enterProvince(region);
+              return;
+            }
+            toggleCity(region);
+          } catch (error) {
+            setStatus(error.message || "地图操作失败，请稍后重试。", true);
+          }
+        });
+      }
+
+      els.backBtn.addEventListener("click", () => {
+        enterChina().catch((error) => setStatus(error.message || "返回全国失败。", true));
+      });
+
+      els.resetZoomBtn.addEventListener("click", drawCurrent);
+
+      els.clearBtn.addEventListener("click", () => {
+        state.selected.clear();
+        state.litTimes.clear();
+        state.searchQuery = "";
+        state.sortByTime = false;
+        const searchInput = document.getElementById("citySearch");
+        if (searchInput) searchInput.value = "";
+        const sortBtn = document.getElementById("sortByTime");
+        if (sortBtn) sortBtn.classList.remove("active");
+        saveSelected();
+        drawCurrent();
+        renderList();
+        setStatus("已清空所有点亮城市。");
+      });
+
+      els.selectedList.addEventListener("click", (event) => {
+        const deleteBtn = event.target.closest(".delete-btn[data-province]");
+        if (deleteBtn) {
+          const province = deleteBtn.dataset.province;
+          const citiesToDelete = [...state.selected.values()].filter(
+            (c) => c.provinceName === province,
+          );
+          citiesToDelete.forEach((city) => {
+            state.selected.delete(String(city.adcode));
+            state.litTimes.delete(String(city.adcode));
+          });
+          saveSelected();
+          drawCurrent();
+          renderList();
+          setStatus(`已取消点亮：${province}`);
+          return;
+        }
+
+        const card = event.target.closest(".city-card[data-province]");
+        if (card) {
+          const province = card.dataset.province;
+          const citiesInProvince = [...state.selected.values()].filter(
+            (c) => c.provinceName === province,
+          );
+          if (citiesInProvince.length > 0 && state.mode === "china") {
+            enterProvinceByAdcode(citiesInProvince[0].provinceAdcode);
+          }
+        }
+      });
+
+      window.addEventListener("resize", () => {
+        if (chart) chart.resize();
+      });
+
+      if (window.echarts) {
+        chart = echarts.init(document.getElementById("map"), null, {
+          renderer: "canvas",
+          useDirtyRect: true,
+        });
+        bindChartEvents();
+        setupFilterEvents();
+        const initialProvince = new URLSearchParams(window.location.search).get("province");
+        const initialTask = initialProvince ? enterProvinceByAdcode(initialProvince) : enterChina();
+        initialTask.catch((error) => setStatus(error.message || "全国地图加载失败。", true));
+      } else {
+        setStatus("ECharts 脚本加载失败，请检查网络或 CDN 可用性。", true);
+      }
+
+      const travelEls = {
+        currentCityInput: document.getElementById("currentCityInput"),
+        generatePromptBtn: document.getElementById("generatePromptBtn"),
+        promptBox: document.getElementById("travelPromptBox"),
+        copyBtn: document.getElementById("copyPromptBtn"),
+      };
+
+      let generatedPrompt = "";
+
+      travelEls.generatePromptBtn.addEventListener("click", () => {
+        const currentCity = travelEls.currentCityInput.value.trim();
+        const visitedCities = [...state.selected.values()].map((c) => c.name);
+
+        if (!currentCity) {
+          travelEls.promptBox.innerHTML = '<p class="travel-hint" style="color: var(--danger)">请输入你目前所在的城市</p>';
+          return;
+        }
+
+        const visitedText = visitedCities.length > 0 ? visitedCities.join("、") : "暂无";
+
+        generatedPrompt = `我目前常住${currentCity}，已出行打卡城市清单：${visitedText}。
+
+请按照以下硬性优先级为我规划下一站旅行目的地：
+
+1.第一优先级：以${currentCity}为起点，地理距离由近到远排序
+2.第二优先级：旅行风格、地域人文、地貌风光、城市气质，彻底区别于我已去过的所有城市
+3.拒绝同类型网红都市、江南水乡、沿海海滨、西南山地、中部省会热门城市
+4.只推荐具体地级市 / 特色城区，附带详细推荐理由、特色亮点、游玩体验、适配出行时长
+5.风格偏向小众治愈、人文底蕴、独特地貌、本土烟火气，避开同质化旅行地`;
+
+        travelEls.promptBox.innerHTML = `<p>${generatedPrompt.replace(/\n/g, "<br>")}</p>`;
+        travelEls.copyBtn.style.display = "flex";
+      });
+
+      travelEls.copyBtn.addEventListener("click", async () => {
+        if (!generatedPrompt) return;
+        try {
+          await navigator.clipboard.writeText(generatedPrompt);
+          const originalText = travelEls.copyBtn.innerHTML;
+          travelEls.copyBtn.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> 已复制`;
+          setTimeout(() => {
+            travelEls.copyBtn.innerHTML = originalText;
+          }, 2000);
+        } catch {
+          setStatus("复制失败，请手动选择文本复制。", true);
+        }
+      });
+    </script>
+  </body>
+</html>
